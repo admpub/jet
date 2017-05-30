@@ -73,7 +73,7 @@ func (l *OSFileSystemLoader) AddPath(path string) {
 }
 
 // AddGopathPath adds a path located in the GOPATH.
-// Example: l.AddGopathPath("github.com/CloudyKit/jet/example/views")
+// Example: l.AddGopathPath("github.com/admpub/jet/example/views")
 func (l *OSFileSystemLoader) AddGopathPath(path string) {
 	paths := filepath.SplitList(os.Getenv("GOPATH"))
 	for i := 0; i < len(paths); i++ {
