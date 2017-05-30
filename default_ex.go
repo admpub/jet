@@ -17,3 +17,13 @@ func AddDefaultVariables(values map[string]interface{}) {
 		defaultVariables[name] = reflect.ValueOf(value)
 	}
 }
+
+func (s *Set) SetDefaultExtensions(exts ...string) *Set {
+	s.defaultExtensions = exts
+	return s
+}
+
+func (s *Set) AddDefaultExtensions(exts ...string) *Set {
+	s.defaultExtensions = append(s.defaultExtensions, exts...)
+	return s
+}
