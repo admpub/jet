@@ -1,4 +1,4 @@
-# Jet Template Engine for Go [![Build Status](https://travis-ci.org/CloudyKit/jet.svg?branch=master)](https://travis-ci.org/CloudyKit/jet) [![Build status](https://ci.appveyor.com/api/projects/status/5g4whw3c6518vvku?svg=true)](https://ci.appveyor.com/project/CloudyKit/jet)
+# Jet Template Engine for Go [![Build Status](https://travis-ci.org/admpub/jet.svg?branch=master)](https://travis-ci.org/admpub/jet) [![Build status](https://ci.appveyor.com/api/projects/status/ip5brm11jexdfani?svg=true)](https://ci.appveyor.com/project/admpub/jet)
 
 [![Join the chat at https://gitter.im/CloudyKit/jet](https://badges.gitter.im/CloudyKit/jet.svg)](https://gitter.im/CloudyKit/jet)
 
