@@ -121,13 +121,13 @@ func RunJetTestWithTemplate(t *testing.T, tt *Template, variables VarMap, contex
 		{
 			Name: fmt.Sprintf("\tJetTest(%s)", tt.Name),
 			F: func(t *testing.T) {
-				buff := bytes.NewBuffer(nil)
-				err := tt.Execute(buff, variables, context)
+				var buf bytes.Buffer
+				err := tt.Execute(&buf, variables, context)
 				if err != nil {
 					t.Errorf("Eval error: %q executing %s", err.Error(), tt.Name)
 					return
 				}
-				result := buff.String()
+				result := strings.Replace(buf.String(), "\r\n", "\n", -1)
 				if result != testExpected {
 					t.Errorf("Result error expected %q got %q on %s", testExpected, result, tt.Name)
 				}
@@ -243,6 +243,37 @@ func TestEvalBlockYieldIncludeNode(t *testing.T) {
 		`{{import "BlockContentLib"}}{{yield row(cols="12") content}}{{cols}}{{end}}`,
 		"\n    <div class=\"row\">\n        \n            \n    <div class=\"col 12\">12</div>\n\n        \n    </div>\n")
 
+	JetTestingSet.LoadTemplate("BlockContentLib2", `
+		{{block col(
+			columns,
+		)}}
+			<div class="col {{columns}}">{{yield content}}</div>
+		{{end}}
+		{{block row(
+			cols="",
+			rowClass="",
+		)}}
+			<div class="row {{ rowClass }}">
+				{{if len(cols) > 0}}
+					{{yield col(columns=cols) content}}
+						{{yield content}}
+					{{end}}
+				{{else}}
+					{{yield content}}
+				{{end}}
+			</div>
+		{{end}}
+	`)
+	RunJetTest(t, nil, nil, "BlockContentParam2",
+		`{{import "BlockContentLib2"}}
+		{{yield row(
+			cols="12",
+			rowClass="highlight-row",
+		) content}}
+			{{cols}}
+		{{end}}`,
+		"\n\t\t\t<div class=\"row highlight-row\">\n\t\t\t\t\n\t\t\t\t\t\n\t\t\t<div class=\"col 12\">\n\t\t\t\t\t\t\n\t\t\t12\n\t\t\n\t\t\t\t\t</div>\n\t\t\n\t\t\t\t\n\t\t\t</div>\n\t\t",
+	)
 }
 
 func TestEvalRangeNode(t *testing.T) {
@@ -271,6 +302,14 @@ func TestEvalDefaultFuncs(t *testing.T) {
 	RunJetTest(t, nil, &User{"Mario Santos", "mario@gmail.com"}, "DefaultFuncs_json", `{{. |writeJson}}`, "{\"Name\":\"Mario Santos\",\"Email\":\"mario@gmail.com\"}\n")
 
 	RunJetTest(t, nil, nil, "DefaultFuncs_replace", `{{replace("My Name Is", " ", "_", -1)}}`, "My_Name_Is")
+	RunJetTest(t, nil, nil, "DefaultFuncs_replace_multiline_statement",
+		`{{replace("My Name Is II",
+			" ",
+			"_",
+			-1,
+		)}}`,
+		"My_Name_Is_II",
+	)
 }
 
 func TestEvalIssetAndTernaryExpression(t *testing.T) {
@@ -302,7 +341,7 @@ func TestEvalIndexExpression(t *testing.T) {
 	RunJetTest(t, nil, map[string]interface{}{"nested": map[string]string{"name": "value"}}, "IndexExpressionMap_6", `{{.["nested"].name}}`, "value")
 
 	vars := make(VarMap)
-	vars.Set("nested", map[string]interface{}{"key": "nested", "nested": map[string]interface{}{"nested": map[string]interface{}{"nested": map[string]interface{}{"name": "value", "strings": []string{"hello"}, "arr": []interface{}{"hello"}}}}})
+	vars.Set("nested", map[string]interface{}{"key": "nested", "nested": map[string]interface{}{"nested": map[string]interface{}{"nested": map[string]interface{}{"name": "value", "strings": []string{"hello"}, "arr": []interface{}{"hello"}, "nil": nil}}}})
 
 	//RunJetTest(t, vars, nil, "IndexExpressionMap_6", `{{nested.nested.nested.nested.name}}`, "value")
 	// todo: this test is failing with race detector enabled, but looks like a bug when running with the race detector enabled
@@ -316,6 +355,8 @@ func TestEvalIndexExpression(t *testing.T) {
 	RunJetTest(t, vars, nil, "IndexExpressionMap_13", `{{nested.nested.nested["nested"]["arr"][0]}}`, "hello")
 	RunJetTest(t, vars, nil, "IndexExpressionMap_14", `{{nested["nested"].nested["nested"].name}}`, "value")
 	RunJetTest(t, vars, nil, "IndexExpressionMap_15", `{{nested["nested"]["nested"].nested.name}}`, "value")
+	RunJetTest(t, vars, nil, "IndexExpressionMap_16_1", `{{nested.nested.nested.nested.nil}}`, "<nil>")
+	RunJetTest(t, vars, nil, "IndexExpressionMap_16_2", `{{nested.nested.nested.nested["nil"]}}`, "<nil>")
 	RunJetTest(t, nil, &User{"José Santos", "email@example.com"}, "IndexExpressionStruct_1", `{{.[0]}}`, "José Santos")
 	RunJetTest(t, nil, &User{"José Santos", "email@example.com"}, "IndexExpressionStruct_2", `{{.["Email"]}}`, "email@example.com")
 }
@@ -330,6 +371,88 @@ func TestEvalSliceExpression(t *testing.T) {
 
 	RunJetTest(t, nil, []string{"111"}, "SliceExpressionSlice_BugIndex", `{{range k,v:= . }}{{k}}{{end}}`, `0`)
 	RunJetTest(t, nil, []string{"111"}, "SliceExpressionSlice_IfLen", `{{if len(.) > 0}}{{.[0]}}{{end}}`, `111`)
+}
+
+func TestEvalPointerExpressions(t *testing.T) {
+	var data = make(VarMap)
+	var s *string
+	data.Set("stringPointer", s)
+	RunJetTest(t, data, nil, "StringPointer_1", `{{ stringPointer }}`, "")
+
+	s2 := "test"
+	data.Set("stringPointer2", &s2)
+	RunJetTest(t, data, nil, "StringPointer_2", `{{ stringPointer2 }}`, "test")
+
+	i2 := 10
+	data.Set("intPointer2", &i2)
+	RunJetTest(t, data, nil, "IntPointer_2", `{{ intPointer2 }}`, "10")
+
+	var i *int
+	data.Set("intPointer", &i)
+	RunJetTest(t, data, nil, "IntPointer_i", `{{ intPointer }}`, "")
+}
+
+func TestEvalPointerLimitNumberOfDereferences(t *testing.T) {
+	var data = make(VarMap)
+
+	var i *int
+	data.Set("intPointer", &i)
+	RunJetTest(t, data, nil, "IntPointer_i", `{{ intPointer }}`, "")
+
+	j := &i
+	data.Set("intPointer", &j)
+	RunJetTest(t, data, nil, "IntPointer_j", `{{ intPointer }}`, "")
+
+	k := &j
+	data.Set("intPointer", &k)
+	RunJetTest(t, data, nil, "IntPointer_1", `{{ intPointer }}`, "<nil>")
+}
+
+func TestEvalStructFieldPointerExpressions(t *testing.T) {
+	var data = make(VarMap)
+
+	type structWithPointers struct {
+		StringField *string
+		IntField    *int
+		StructField *structWithPointers
+	}
+
+	stringVal := "test"
+	intVal := 10
+	nestedStringVal := "nested"
+
+	s := structWithPointers{
+		StringField: &stringVal,
+		IntField:    &intVal,
+		StructField: &structWithPointers{
+			StringField: &nestedStringVal,
+		},
+	}
+	data.Set("structWithPointerFields", s)
+	RunJetTest(t, data, nil, "PointerFields_1", `{{ structWithPointerFields.IntField }}`, "10")
+	RunJetTest(t, data, nil, "PointerFields_2", `{{ structWithPointerFields.StructField.IntField }}`, "")
+	RunJetTest(t, data, nil, "PointerFields_3", `{{ structWithPointerFields.StringField }}`, "test")
+	RunJetTest(t, data, nil, "PointerFields_4", `{{ structWithPointerFields.StructField.StringField }}`, "nested")
+
+	s2 := structWithPointers{
+		StringField: &stringVal,
+		IntField:    &intVal,
+	}
+	data.Set("structWithPointerFields2", s2)
+	RunJetTest(t, data, nil, "PointerFields_5", `{{ structWithPointerFields2.IntField }}`, "10")
+	RunJetTest(t, data, nil, "PointerFields_6", `{{ structWithPointerFields2.StringField }}`, "test")
+	RunJetTest(t, data, nil, "PointerFields_7", `{{ structWithPointerFields2.StructField }}`, "")
+
+	var set = NewSet(nil, "./testData")
+	tt, err := set.parse("PointerFields_8", `{{ structWithPointerFields2.StructField.StringField }}`)
+	if err != nil {
+		t.Error(err)
+	}
+	buff := bytes.NewBuffer(nil)
+	err = tt.Execute(buff, data, nil)
+	if err == nil {
+		t.Error("expected evaluating field of nil structto fail with a runtime error but got nil")
+	}
 }
 
 func TestEvalBuiltinExpression(t *testing.T) {

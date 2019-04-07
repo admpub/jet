@@ -16,12 +16,13 @@ package jet
 
 import (
 	"fmt"
-	"github.com/CloudyKit/fastprinter"
 	"io"
 	"reflect"
 	"runtime"
 	"strconv"
 	"sync"
+
+	"github.com/CloudyKit/fastprinter"
 )
 
 var (
@@ -1081,6 +1082,15 @@ func (st *Runtime) evalBaseExpressionGroup(node Node) reflect.Value {
 		if !resolved.IsValid() {
 			node.errorf("identifier %q is not available in the current scope %v", node, st.variables)
 		}
+
+		// limit the number of pointers to follow
+		for dereferenceLimit := 2; resolved.Kind() == reflect.Ptr && dereferenceLimit >= 0; dereferenceLimit-- {
+			if resolved.IsNil() {
+				return reflect.ValueOf("")
+			}
+			resolved = reflect.Indirect(resolved)
+		}
+
 		return resolved
 	case NodeField:
 		node := node.(*FieldNode)
@@ -1437,9 +1447,17 @@ var cachedStructsFieldIndex = map[reflect.Type]map[string][]int{}
 
 func getFieldOrMethodValue(key string, v reflect.Value) reflect.Value {
 	value := getValue(key, v)
-	if value.Kind() == reflect.Interface {
+	if value.Kind() == reflect.Interface && !value.IsNil() {
 		value = value.Elem()
 	}
+
+	for dereferenceLimit := 2; value.Kind() == reflect.Ptr && dereferenceLimit >= 0; dereferenceLimit-- {
+		if value.IsNil() {
+			return reflect.ValueOf("")
+		}
+		value = reflect.Indirect(value)
+	}
+
 	return value
 }
 

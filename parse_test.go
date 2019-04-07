@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"io/ioutil"
 	"path"
+	"strings"
 	"testing"
 )
 
@@ -25,15 +26,21 @@ var parseSet = NewSet(nil, "./testData")
 
 type ParserTestCase struct {
 	*testing.T
+	set *Set
 }
 
 func (t ParserTestCase) ExpectPrintName(name, input, output string) {
-	template, err := parseSet.parse(name, input)
+	set := parseSet
+	if t.set != nil {
+		set = t.set
+	}
+	template, err := set.parse(name, input)
 	if err != nil {
 		t.Errorf("%q %s", input, err.Error())
 		return
 	}
-	expected := template.String()
+	expected := strings.Replace(template.String(), "\r\n", "\n", -1)
+	output = strings.Replace(output, "\r\n", "\n", -1)
 	if expected != output {
 		t.Errorf("Unexpected tree on %s Got:\n%s\nExpected: \n%s\n", name, expected, output)
 	}
@@ -58,36 +65,43 @@ func (t ParserTestCase) ExpectPrintSame(input string) {
 }
 
 func TestParseTemplateAndImport(t *testing.T) {
-	p := ParserTestCase{t}
+	p := ParserTestCase{T: t}
 	p.TestPrintFile("extends.jet")
 	p.TestPrintFile("imports.jet")
 }
 
 func TestParseTemplateControl(t *testing.T) {
-	p := ParserTestCase{t}
+	p := ParserTestCase{T: t}
 	p.TestPrintFile("if.jet")
 	p.TestPrintFile("range.jet")
 }
 
 func TestParseTemplateExpressions(t *testing.T) {
-	p := ParserTestCase{t}
+	p := ParserTestCase{T: t}
 	p.TestPrintFile("simple_expression.jet")
 	p.TestPrintFile("additive_expression.jet")
 	p.TestPrintFile("multiplicative_expression.jet")
 }
 
 func TestParseTemplateBlockYield(t *testing.T) {
-	p := ParserTestCase{t}
+	p := ParserTestCase{T: t}
 	p.TestPrintFile("block_yield.jet")
 	p.TestPrintFile("new_block_yield.jet")
 }
 
 func TestParseTemplateIndexSliceExpression(t *testing.T) {
-	p := ParserTestCase{t}
+	p := ParserTestCase{T: t}
 	p.TestPrintFile("index_slice_expression.jet")
 }
 
 func TestParseTemplateAssignment(t *testing.T) {
-	p := ParserTestCase{t}
+	p := ParserTestCase{T: t}
 	p.TestPrintFile("assignment.jet")
+}
+
+func TestParseTemplateWithCustomDelimiters(t *testing.T) {
+	set := NewSet(nil, "./testData")
+	set.Delims("[[", "]]")
+	p := ParserTestCase{T: t, set: set}
+	p.TestPrintFile("custom_delimiters.jet")
 }
